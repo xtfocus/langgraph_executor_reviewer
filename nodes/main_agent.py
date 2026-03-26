@@ -35,7 +35,7 @@ def agent_node(state: SessionState) -> SessionState:
             f"Ambiguous — distinct search angles:\n"
             + "\n".join(f"  - {s}" for s in suggestions)
             + "\n\nRun hybrid_search for EACH angle in parallel. Synthesize into one answer. "
-            "If results require scoping, call ask_user_question with options grounded in results."
+            "If results are still partial, continue multi-hop searching for missing entities/relationships."
         )
     else:
         instruction = (
@@ -48,12 +48,7 @@ def agent_node(state: SessionState) -> SessionState:
 
     collab = sync_collab_attempts_at_main_agent_start(state)
     collab_history_str = format_collab_attempts_for_prompt(collab)
-    print(
-        f"\n[Main Agent Debug] messages={len(state.get('messages') or [])} "
-        f"collab_attempts={len(collab)}"
-    )
     preview = collab_history_str[:300].replace("\n", "\\n")
-    print(f"[Main Agent Debug] collab_history_preview={preview}")
 
     system_base = AGENT_SYSTEM_PROMPT.format(
         user_account=json.dumps(state.get("user_account", {})),

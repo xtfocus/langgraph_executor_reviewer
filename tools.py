@@ -148,22 +148,4 @@ def keyword_search(
     )
 
 
-@tool
-def ask_user_question(question: str, suggestions: list[str]) -> str:
-    """
-    Ask the user a clarifying question with grounded suggestions.
-    Only call after searching when needed (NO_RESULTS or scoping).
-    """
-    print(f"\n🤖 {question}")
-    for i, s in enumerate(suggestions, 1):
-        print(f"   {i}. {s}")
-    raw = input("   Enter number or type your own: ").strip()
-    if raw.isdigit():
-        idx = int(raw) - 1
-        answer = suggestions[idx] if 0 <= idx < len(suggestions) else raw
-    else:
-        answer = raw
-    return f"User clarification: {answer}"
-
-
 TOOLS = [hybrid_search, semantic_search, keyword_search]

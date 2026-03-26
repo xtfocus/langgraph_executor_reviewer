@@ -11,7 +11,6 @@ def build_message_history(
     messages: list,
     window: int = 10,
     role_label: str = "Agent",
-    debug_removed_types: bool = False,
 ) -> str:
     """Format recent conversation, excluding tool messages and tool-call-only AI messages."""
     # Important: apply the "window" after filtering.
@@ -46,10 +45,6 @@ def build_message_history(
             break
 
     filtered = list(reversed(selected))
-
-    if debug_removed_types:
-        selected_types = [m.__class__.__name__ for m in filtered]
-        print(f"\n[History Debug] window={window} selected={selected_types}")
 
     history_lines = []
     for m in filtered:
@@ -163,7 +158,7 @@ def build_current_attempt_snapshot(
     turn_tool_calling_history: list,
 ) -> dict[str, Any]:
     """
-    Build one CollabAttemptSnapshot for the current attempt (tools + conclusion).
+    Build one attempt snapshot for the current attempt (tools + conclusion).
     reviewer_approved / reviewer_feedback left None/empty for reviewer to fill.
     """
     all_calls = list(turn_tool_calling_history or [])

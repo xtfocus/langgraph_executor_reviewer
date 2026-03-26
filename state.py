@@ -8,10 +8,6 @@ from langgraph.graph.message import add_messages
 from .config import MAIN_AGENT_MAX_TOOL_ROUNDS, REVIEWER_EXPLORATIVE_DEFAULT
 
 
-# One snapshot per main-agent conclusion + reviewer round.
-# Filled when main_agent produces a conclusion; reviewer_* set when reviewer runs.
-CollabAttemptSnapshot = dict  # attempt_index, tools_called, conclusion, reviewer_approved?, reviewer_feedback?
-
 # Sentinel for `merge_turn_tool_calling_history`: replace the list with `right[1:]`
 # (usually `[]`). This is needed because `turn_tool_calling_history` is updated via
 # list-reducer semantics (append), so we still need a safe "clear" mechanism at the
@@ -46,7 +42,6 @@ class SessionState(TypedDict):
     user_account: dict
     num_messages: int
     tool_calling_history: Annotated[list, operator.add]
-    file_system: dict
     current_query: str
     collab_attempts: list  # chronological rounds: tools+results, synthesis, reviewer
     review_count: int
@@ -69,7 +64,6 @@ def make_initial_state() -> SessionState:
         "num_messages": 0,
         "tool_calling_history": [],
         "turn_tool_calling_history": [],
-        "file_system": {"docs/": [], "uploads/": []},
         "current_query": "",
         "collab_attempts": [],
         "review_count": 0,

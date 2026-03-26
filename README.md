@@ -21,7 +21,7 @@ START → context_analyzer → main_agent ⇄ tools → reviewer? → stream_ans
 | `config.py` | `OPENAI_*`, Langfuse, `MAX_REVIEWS_PER_TURN`, `MAIN_AGENT_MAX_TOOL_ROUNDS` |
 | `state.py` | `SessionState` TypedDict, `make_initial_state()` |
 | `knowledge_base.py` | `SIMULATED_KB` — dummy documents for retrieval demos |
-| `tools.py` | KB search tools (Command-returning) + `ask_user_question` (not in default `TOOLS` list) |
+| `tools.py` | KB search tools (Command-returning) |
 | `llm.py` | Shared `ChatOpenAI` + `llm_with_tools` |
 | `prompts.py` | System prompts for analyzer, agent, reviewer, answer |
 | `nodes/context_analyzer.py` | Query enhancement node |
