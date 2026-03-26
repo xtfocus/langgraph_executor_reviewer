@@ -58,7 +58,6 @@ def main():
         state["current_query"] = user_input
         state["collab_attempts"] = []
         state["review_count"] = 0
-        state["tool_calls_at_turn_start"] = len(state.get("tool_calling_history", []))
         state["tool_calls_at_start_of_current_attempt"] = 0
         state["reviewer_result"] = None
         state["last_review_approved"] = True

@@ -2,7 +2,7 @@
 
 import json
 from typing import Any
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .config import PROMPT_HISTORY_ROLE_LABEL, PROMPT_HISTORY_WINDOW
 
@@ -87,46 +87,6 @@ def render_history_for_prompt(
     return build_message_history(messages, window=window, role_label=role_label)
 
 
-def _turn_slice_from_last_human(messages: list) -> list:
-    """Messages from last HumanMessage to end (current turn)."""
-    last_human_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], HumanMessage):
-            last_human_idx = i
-            break
-    return messages[last_human_idx:] if last_human_idx >= 0 else messages[-20:]
-
-
-def get_turn_tool_calls_with_results(messages: list) -> list[dict[str, Any]]:
-    """
-    From the current turn (last HumanMessage to end), collect (tool, args, result) in order.
-    Used to slice by attempt via tool_calls_at_start_of_current_attempt.
-    """
-    turn = _turn_slice_from_last_human(messages)
-    results_by_id: dict[str, str] = {}
-    for m in turn:
-        if isinstance(m, ToolMessage):
-            tid = getattr(m, "tool_call_id", "") or ""
-            content = getattr(m, "content", "") or ""
-            # Some tool implementations may emit multiple ToolMessages per id.
-            # Concatenate to avoid losing later chunks.
-            if tid in results_by_id and results_by_id[tid]:
-                results_by_id[tid] = results_by_id[tid] + "\n" + content
-            else:
-                results_by_id[tid] = content
-
-    out: list[dict[str, Any]] = []
-    for m in turn:
-        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
-            for tc in m.tool_calls:
-                name = tc.get("name", "?") if isinstance(tc, dict) else getattr(tc, "name", "?")
-                args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                tid = tc.get("id", "") if isinstance(tc, dict) else getattr(tc, "id", "")
-                result = results_by_id.get(tid, "<no result>")
-                out.append({"tool": name, "args": args, "result": result})
-    return out
-
-
 def _fence_block_lines(text: str, indent: str = "     ") -> list[str]:
     """
     Markdown fenced block lines for prompt text. Grows fence length if `text` contains ```.
@@ -154,14 +114,14 @@ def sync_collab_attempts_at_main_agent_start(state: dict) -> list[dict[str, Any]
     After tool results arrive, ensure the current round exists in collab_attempts with
     tools_called filled and conclusion pending. Same round can get more tools before synthesis.
     After reviewer rejection, the next tool batch starts a new round.
+
+    This function reads from `state["turn_tool_calling_history"]`, which is populated
+    by Command-returning KB tools (so we don't need to reconstruct call/result pairs
+    by scanning `state["messages"]`).
     """
     attempts: list[dict[str, Any]] = [dict(a) for a in (state.get("collab_attempts") or [])]
-    start_global = int(state.get("tool_calls_at_start_of_current_attempt") or 0)
-    turn_start_global = int(state.get("tool_calls_at_turn_start") or 0)
-    all_t = get_turn_tool_calls_with_results(state.get("messages") or [])
-    # all_t is current-turn-local, while state indices are global over session history.
-    # Convert to per-turn offset to avoid empty slices on later turns.
-    start_local = max(0, start_global - turn_start_global)
+    start_local = int(state.get("tool_calls_at_start_of_current_attempt") or 0)
+    all_t = list(state.get("turn_tool_calling_history") or [])
     tools_slice = all_t[start_local:] if start_local <= len(all_t) else []
 
     if not tools_slice:
@@ -198,19 +158,16 @@ def sync_collab_attempts_at_main_agent_start(state: dict) -> list[dict[str, Any]
 
 
 def build_current_attempt_snapshot(
-    messages: list,
-    tool_calling_history: list,
     tool_calls_at_start_of_current_attempt: int,
     conclusion: str,
-    tool_calls_at_turn_start: int = 0,
+    turn_tool_calling_history: list,
 ) -> dict[str, Any]:
     """
     Build one CollabAttemptSnapshot for the current attempt (tools + conclusion).
     reviewer_approved / reviewer_feedback left None/empty for reviewer to fill.
     """
-    all_calls = get_turn_tool_calls_with_results(messages)
-    # This attempt's calls are from start index to end of current turn's calls.
-    start_local = max(0, tool_calls_at_start_of_current_attempt - tool_calls_at_turn_start)
+    all_calls = list(turn_tool_calling_history or [])
+    start_local = max(0, int(tool_calls_at_start_of_current_attempt or 0))
     tools_called = all_calls[start_local:] if start_local <= len(all_calls) else all_calls
     return {
         "attempt_index": 0,  # caller sets from len(collab_attempts) + 1
@@ -225,6 +182,9 @@ def format_collab_attempts_for_prompt(collab_attempts: list[dict]) -> str:
     """
     Temporal log for prompts: what the main agent and reviewer did this turn, in order.
     Per round: KB tool calls + results → main agent synthesis → reviewer (if any).
+
+    Tool results are rendered inside triple backticks so large outputs stay readable
+    and do not get truncated by the previous prompt construction approach.
     """
     if not collab_attempts:
         return (
@@ -275,56 +235,3 @@ def format_collab_attempts_for_prompt(collab_attempts: list[dict]) -> str:
             lines.append("")
 
     return "\n".join(lines).strip()
-
-
-def serialize_turn_for_agent_system_prompt(turn_messages: list) -> str:
-    """
-    Flatten one user-turn message slice for the main agent system prompt.
-    Pairs each tool call with its output in one block (no duplicate tool name / id noise).
-    """
-    blocks: list[str] = []
-    i = 0
-    n = len(turn_messages)
-    while i < n:
-        m = turn_messages[i]
-        if isinstance(m, HumanMessage):
-            blocks.append("## User message\n" + (str(m.content) if m.content else ""))
-            i += 1
-            continue
-        if isinstance(m, ToolMessage):
-            blocks.append(
-                "## Unmatched tool output\n"
-                + (str(m.content) if m.content else "")
-            )
-            i += 1
-            continue
-        if isinstance(m, AIMessage):
-            tcs = getattr(m, "tool_calls", None) or []
-            if tcs:
-                j = i + 1
-                results_by_id: dict[str, str] = {}
-                while j < n and isinstance(turn_messages[j], ToolMessage):
-                    tm = turn_messages[j]
-                    tid = getattr(tm, "tool_call_id", "") or ""
-                    results_by_id[tid] = getattr(tm, "content", "") or ""
-                    j += 1
-                lines = ["## Tool calls and outputs"]
-                for tc in tcs:
-                    name = tc.get("name", "?") if isinstance(tc, dict) else getattr(tc, "name", "?")
-                    args = tc.get("args", {}) if isinstance(tc, dict) else getattr(tc, "args", {})
-                    tid = tc.get("id", "") if isinstance(tc, dict) else getattr(tc, "id", "")
-                    args_str = json.dumps(args, ensure_ascii=False)
-                    out = results_by_id.get(tid, "<no result>")
-                    lines.append(f"Called: {name} {args_str}")
-                    lines.append("Output:")
-                    lines.append(str(out))
-                    lines.append("")
-                blocks.append("\n".join(lines).rstrip())
-                i = j
-            else:
-                i += 1
-            if m.content:
-                blocks.append("## Assistant internal notes\n" + str(m.content))
-            continue
-        i += 1
-    return "\n\n".join(blocks) if blocks else "## Turn context\n(empty)"

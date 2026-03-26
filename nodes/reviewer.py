@@ -14,11 +14,10 @@ from ..utils import render_history_for_prompt, format_collab_attempts_for_prompt
 
 
 def _search_tools_used_this_turn(state: SessionState) -> bool:
-    start_idx = state.get("tool_calls_at_turn_start", 0)
-    history = state.get("tool_calling_history", [])
-    new_calls = history[start_idx:]
+    """Return True if any KB search tool ran during the current user turn."""
+    turn_hist = state.get("turn_tool_calling_history") or []
     search_tools = {"hybrid_search", "semantic_search", "keyword_search"}
-    return any(h.get("tool") in search_tools for h in new_calls)
+    return any(h.get("tool") in search_tools for h in turn_hist)
 
 
 def route_main_after_agent(
@@ -108,7 +107,9 @@ def reviewer_node(state: SessionState) -> dict:
         out["collab_attempts"] = attempts[:-1] + [last]
     # When sending main_agent for a retry, set start index for next attempt's tool calls
     if not approved:
-        out["tool_calls_at_start_of_current_attempt"] = len(state.get("tool_calling_history", []))
+        out["tool_calls_at_start_of_current_attempt"] = len(
+            state.get("turn_tool_calling_history") or []
+        )
         out["agent_tool_rounds_remaining"] = MAIN_AGENT_MAX_TOOL_ROUNDS
 
     return out

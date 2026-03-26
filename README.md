@@ -21,7 +21,7 @@ START → context_analyzer → main_agent ⇄ tools → reviewer? → stream_ans
 | `config.py` | `OPENAI_*`, Langfuse, `MAX_REVIEWS_PER_TURN`, `MAIN_AGENT_MAX_TOOL_ROUNDS` |
 | `state.py` | `SessionState` TypedDict, `make_initial_state()` |
 | `knowledge_base.py` | `SIMULATED_KB` — dummy documents for retrieval demos |
-| `tools.py` | KB search tools + `ask_user_question` (not in default `TOOLS` list) |
+| `tools.py` | KB search tools (Command-returning) + `ask_user_question` (not in default `TOOLS` list) |
 | `llm.py` | Shared `ChatOpenAI` + `llm_with_tools` |
 | `prompts.py` | System prompts for analyzer, agent, reviewer, answer |
 | `nodes/context_analyzer.py` | Query enhancement node |
@@ -30,6 +30,24 @@ START → context_analyzer → main_agent ⇄ tools → reviewer? → stream_ans
 | `nodes/stream_finalize.py` | Streamed final answer + summarization |
 | `graph.py` | `build_graph()`, compiled `graph` |
 | `main.py` | CLI (`/exit`, `/history`, `/summary`) |
+
+## Tool logging (Command-based)
+
+The KB search tools in `tools.py` are implemented as **Command-returning tools**. When a search tool executes, it:
+
+1. Appends a `ToolMessage` to `state["messages"]` (so the LLM sees tool results).
+2. Appends tool `{tool, args, result}` rows into:
+   - `state["tool_calling_history"]` (session-wide, used by the CLI `/history`)
+   - `state["turn_tool_calling_history"]` (turn-scoped, used to render the internal “What we tried so far” scratch log)
+
+Because the tool results are persisted directly into graph state, the prompt rendering no longer needs to reconstruct tool-call/result pairs by scanning `state["messages"]`.
+
+### Turn-scoped state
+
+- `state["turn_tool_calling_history"]`: tool calls + results for the **current user turn only**
+- It is cleared at the start of each turn inside `nodes/context_analyzer.py` using a small sentinel update.
+
+This keeps “What we tried so far (this turn, chronological)” accurate even across multi-hop / reviewer retries.
 
 ## Requirements
 

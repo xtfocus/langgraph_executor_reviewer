@@ -121,7 +121,6 @@ def agent_node(state: SessionState) -> SessionState:
         )
         for tc in getattr(response, "tool_calls", []):
             print(f"   🔧 {tc['name']}({json.dumps(tc['args'], ensure_ascii=False)[:110]})")
-            state["tool_calling_history"].append({"tool": tc["name"], "args": tc["args"]})
         if getattr(response, "tool_calls", None):
             return {
                 "messages": [response],
@@ -149,11 +148,9 @@ def agent_node(state: SessionState) -> SessionState:
     else:
         tool_calls_at_start = state.get("tool_calls_at_start_of_current_attempt", 0)
         snapshot = build_current_attempt_snapshot(
-            state["messages"],
-            state.get("tool_calling_history", []),
             tool_calls_at_start,
             content,
-            int(state.get("tool_calls_at_turn_start", 0)),
+            state.get("turn_tool_calling_history", []),
         )
         snapshot["attempt_index"] = len(final_collab) + 1
         final_collab.append(snapshot)

@@ -267,18 +267,6 @@ Reject when any of the following are true:
 
 ---
 
-## Anti-oversearch rule (CRITICAL)
-Do NOT suggest more searches if ALL are true:
-- The scratch log clearly shows the agent already tried all 3 distinct search tool types (hybrid_search / semantic_search / keyword_search), AND
-- The results are consistently empty/unrelated, AND
-- There is no specific missing entity/relationship that the results imply could exist.
-
-Otherwise, you may suggest one focused next search direction that is likely to close the evidence gap, and specify:
-- which tool to use next, and
-- a concrete query formulation / missing identifier to target, using promising keywords or synonyms derived from the current scratch log (e.g., alternate phrasings, common acronyms, “also known as”, inverse relationships like “X’s Y” vs “Y of X”).
-
----
-
 ## Feedback rules
 - Only provide feedback when approved = false
 - Feedback must be actionable and specific

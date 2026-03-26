@@ -9,7 +9,7 @@ from langgraph.types import Command
 from ..config import MAIN_AGENT_MAX_TOOL_ROUNDS, get_callbacks_config
 from ..llm import llm
 from ..prompts import CONTEXT_ANALYZER_PROMPT
-from ..state import SessionState
+from ..state import RESET_TURN_TOOL_HISTORY, SessionState
 from ..utils import render_history_for_prompt
 
 
@@ -55,7 +55,10 @@ def context_analyzer_node(state: SessionState) -> Command:
     update = {
         "context_analyzer_result": result,
         "messages": [HumanMessage(content=query)],
-        "tool_calls_at_start_of_current_attempt": len(state.get("tool_calling_history", [])),
+        # Reset *turn-scoped* tool history. This ensures the internal scratch log
+        # ("What we tried so far") reflects only the current user turn.
+        "turn_tool_calling_history": [RESET_TURN_TOOL_HISTORY],
+        "tool_calls_at_start_of_current_attempt": 0,
         "agent_tool_rounds_remaining": MAIN_AGENT_MAX_TOOL_ROUNDS,
     }
 
